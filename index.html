@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plano Interativo de 7 Dias – Lei do Controle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A single-page vertical layout with a header, progress bar, navigation buttons, and interactive daily "cards". This structure was chosen because it directly supports the step-by-step nature of the 7-day plan, making it intuitive and engaging for the user. Interactivity (checkboxes, text areas, progress bar) transforms the static report into a dynamic tool, reinforcing the user's sense of accomplishment and control. Gemini API is added to Day 1 to brainstorm actionable steps, adding a layer of intelligent assistance. -->
+    <!-- Visualization & Content Choices: 
+        - Plan Structure -> Goal: Guide User -> Presentation: Interactive Daily Cards -> Interaction: Checkboxes, Text Areas, Progress Bar, AI Button -> Justification: Creates an active, engaging tool that tracks progress and provides AI-powered suggestions, reinforcing the plan's core message. -> Library: Vanilla JS.
+        - Day 1 AI Feature -> Goal: Brainstorm Solutions -> Presentation: Button + Results Area -> Interaction: Click button to call Gemini API -> Justification: Helps users overcome the initial hurdle of defining actions by providing tailored, actionable ideas. -> Library: Gemini API (fetch).
+        - Overall Progress -> Goal: Motivate & Show Progress -> Presentation: Progress Bar -> Interaction: Updates on checkbox click -> Justification: Provides clear, immediate visual feedback of completion, enhancing motivation. -> Library: HTML/CSS/JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        .task-card.completed {
+            border-color: #10B981; /* green-500 */
+            opacity: 0.8;
+        }
+        .task-card.completed .day-badge {
+            background-color: #10B981; /* green-500 */
+            color: white;
+        }
+        textarea {
+            resize: vertical;
+        }
+        .gemini-button {
+            background-color: #8B5CF6; /* violet-500 */
+            color: white;
+        }
+        .gemini-button:hover {
+            background-color: #7C3AED; /* violet-600 */
+        }
+        .loader {
+            border: 4px solid #f3f3f3; /* Light grey */
+            border-top: 4px solid #8B5CF6; /* violet-500 */
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-stone-50 text-stone-800">
+
+    <div class="container mx-auto max-w-4xl p-4 sm:p-6 md:p-8">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-stone-900 mb-2">🌟 Plano de 7 Dias: Lei do Controle na Prática</h1>
+            <p class="text-lg text-stone-600">Aumente a sensação de que <strong class="font-semibold">você está no comando da sua vida</strong> através de ações práticas e diárias.</p>
+        </header>
+
+        <div id="progress-section" class="mb-8 p-4 bg-white rounded-xl shadow-sm">
+            <h2 class="text-md font-semibold text-stone-700 mb-2">Seu Progresso na Semana:</h2>
+            <div class="w-full bg-stone-200 rounded-full h-4">
+                <div id="progress-bar" class="bg-teal-500 h-4 rounded-full transition-all duration-500" style="width: 0%;"></div>
+            </div>
+            <p id="progress-text" class="text-right text-sm text-stone-500 mt-1">0 de 7 dias completos</p>
+        </div>
+        
+        <div id="nav-section" class="text-center mb-10">
+            <h3 class="text-md font-semibold text-stone-700 mb-3">Navegue pelos dias:</h3>
+            <div id="nav-buttons" class="flex flex-wrap justify-center gap-2">
+            </div>
+        </div>
+
+        <main id="tasks-container" class="space-y-6">
+        </main>
+
+        <footer class="mt-12 p-6 bg-teal-600 text-white rounded-xl shadow-lg text-center">
+            <h3 class="font-bold text-xl mb-2">🧭 Mantra Diário</h3>
+            <p class="text-lg italic">“Eu não controlo tudo, mas controlo minhas escolhas. E isso já é poder suficiente.”</p>
+        </footer>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const tasksData = [
+                {
+                    day: 1,
+                    title: "O que depende de mim?",
+                    task: "Anote 3 coisas na sua vida que te incomodam. Depois, escreva ao lado o que depende de você para mudar ou melhorar.",
+                    example: "Exemplo: 'Não gosto do meu trabalho' → Posso atualizar meu currículo, procurar cursos, me candidatar para algo novo.",
+                    hasInput: true,
+                    hasGemini: true
+                },
+                {
+                    day: 2,
+                    title: "Pequenas vitórias",
+                    task: "Escolha 2 ações simples que você pode fazer hoje mesmo para sentir controle. Elas devem ser fáceis e depender só de você.",
+                    example: "Exemplo: arrumar a cama, beber mais água, desligar o celular 30 minutos antes de dormir, caminhar 10 minutos.",
+                    hasInput: false
+                },
+                {
+                    day: 3,
+                    title: "Controle emocional",
+                    task: "Sempre que sentir raiva, frustração ou tristeza hoje, pare e pergunte: 'O que está sob meu controle nessa situação?' Escreva pelo menos 1 situação do seu dia em que você respondeu com mais consciência ao invés de reagir por impulso.",
+                    example: null,
+                    hasInput: true
+                },
+                {
+                    day: 4,
+                    title: "Rotina mínima",
+                    task: "Crie uma mini rotina de 3 passos que você vai seguir nos próximos dias. Tem que ser algo simples e realista. Essa estrutura te lembra que você comanda seu tempo.",
+                    example: "Exemplo: 1. Acordar até X horas. 2. Tomar café sem celular. 3. Planejar 3 tarefas do dia.",
+                    hasInput: false
+                },
+                {
+                    day: 5,
+                    title: "Escolhas conscientes",
+                    task: "Durante o dia, observe 3 escolhas que você fez com consciência, mesmo que simples. Anote: 'Hoje eu escolhi ___ porque quero ___.'",
+                    example: "Exemplos de escolhas: o que comer, dizer 'não' a alguém, priorizar um tempo pra você.",
+                    hasInput: true
+                },
+                {
+                    day: 6,
+                    title: "Visualize sua vida no controle",
+                    task: "Feche os olhos por 3-5 minutos e visualize sua vida daqui a 6 meses, vivendo com autonomia, clareza e responsabilidade. Depois, anote: 'Como é a versão de mim mesmo que está no controle da própria vida?'",
+                    example: null,
+                    hasInput: true
+                },
+                {
+                    day: 7,
+                    title: "Revisão e compromisso",
+                    task: "Responda no papel ou abaixo: 1. O que eu aprendi essa semana sobre mim? 2. O que quero continuar fazendo? 3. Qual atitude eu me comprometo a manter?",
+                    example: "Finalize dizendo em voz alta: 'Eu assumo o controle da minha vida, um passo por vez. Eu escolho crescer.'",
+                    hasInput: true
+                }
+            ];
+
+            const tasksContainer = document.getElementById('tasks-container');
+            const navButtonsContainer = document.getElementById('nav-buttons');
+            const progressBar = document.getElementById('progress-bar');
+            const progressText = document.getElementById('progress-text');
+            
+            let completedTasks = 0;
+
+            function updateProgress() {
+                completedTasks = document.querySelectorAll('.task-checkbox:checked').length;
+                const progressPercentage = (completedTasks / tasksData.length) * 100;
+                progressBar.style.width = `${progressPercentage}%`;
+                progressText.textContent = `${completedTasks} de ${tasksData.length} dias completos`;
+            }
+
+            async function callGeminiAPI(prompt, button, resultContainer) {
+                button.disabled = true;
+                button.innerHTML = '<div class="loader"></div>';
+                resultContainer.innerHTML = '';
+
+                let chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                       throw new Error(`API Error: ${response.statusText}`);
+                    }
+
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const text = result.candidates[0].content.parts[0].text;
+                        // Simple markdown to HTML conversion
+                        let htmlText = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                           .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                                           .replace(/^- (.*$)/gm, '<li class="ml-4 list-disc">$1</li>');
+                        htmlText = htmlText.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+                        resultContainer.innerHTML = htmlText;
+                    } else {
+                        resultContainer.textContent = "Não foi possível gerar sugestões. Tente novamente.";
+                    }
+                } catch (error) {
+                    console.error("Error calling Gemini API:", error);
+                    resultContainer.textContent = "Ocorreu um erro ao buscar sugestões. Verifique o console para mais detalhes.";
+                } finally {
+                    button.disabled = false;
+                    button.innerHTML = '✨ Gerar Novas Ideias';
+                }
+            }
+
+            tasksData.forEach(task => {
+                const navButton = document.createElement('button');
+                navButton.className = 'px-3 py-1 bg-white border border-stone-300 rounded-full text-sm text-stone-600 font-semibold hover:bg-teal-500 hover:text-white hover:border-teal-500 transition-colors';
+                navButton.textContent = `Dia ${task.day}`;
+                navButton.dataset.target = `task-${task.day}`;
+                navButton.addEventListener('click', () => {
+                    document.getElementById(`task-${task.day}`).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                });
+                navButtonsContainer.appendChild(navButton);
+
+                const card = document.createElement('div');
+                card.id = `task-${task.day}`;
+                card.className = 'task-card bg-white p-6 rounded-xl shadow-sm border-2 border-transparent transition-all duration-300';
+                
+                let exampleHtml = task.example ? `<p class="mt-4 text-sm text-stone-500 italic">${task.example}</p>` : '';
+                
+                let inputHtml = '';
+                if (task.hasInput) {
+                    inputHtml = `
+                        <div class="mt-4">
+                            <label for="input-${task.day}" class="block text-sm font-medium text-stone-600 mb-1">Suas anotações:</label>
+                            <textarea id="input-${task.day}" rows="4" class="w-full p-2 border border-stone-300 rounded-md focus:ring-2 focus:ring-teal-400 focus:border-teal-400 transition"></textarea>
+                            <p class="text-xs text-stone-400 mt-1">O texto não é salvo ao fechar a página.</p>
+                        </div>
+                    `;
+                }
+
+                let geminiHtml = '';
+                if (task.hasGemini) {
+                    geminiHtml = `
+                        <div id="gemini-section-${task.day}" class="mt-5">
+                            <button id="gemini-btn-${task.day}" class="gemini-button font-bold py-2 px-4 rounded-lg transition-transform transform hover:scale-105 w-full md:w-auto">
+                                ✨ Brainstorm de Ações
+                            </button>
+                            <div id="gemini-result-${task.day}" class="mt-4 p-4 bg-violet-50 rounded-lg text-stone-700"></div>
+                        </div>
+                    `;
+                }
+
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span class="day-badge inline-block bg-teal-100 text-teal-800 text-sm font-semibold px-3 py-1 rounded-full mb-3 transition-colors">${`Dia ${task.day}`}</span>
+                            <h3 class="text-xl font-bold text-stone-800">${task.title}</h3>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                             <label for="check-${task.day}" class="text-sm font-medium text-stone-600 cursor-pointer">Feito!</label>
+                             <input type="checkbox" id="check-${task.day}" class="task-checkbox h-5 w-5 rounded border-stone-300 text-teal-600 focus:ring-teal-500 cursor-pointer">
+                        </div>
+                    </div>
+                    <div class="mt-4 text-stone-700 space-y-2">
+                        <p>${task.task}</p>
+                        ${exampleHtml}
+                        ${inputHtml}
+                        ${geminiHtml}
+                    </div>
+                `;
+                tasksContainer.appendChild(card);
+                
+                if (task.hasGemini) {
+                    const geminiBtn = document.getElementById(`gemini-btn-${task.day}`);
+                    const geminiResult = document.getElementById(`gemini-result-${task.day}`);
+                    const userInput = document.getElementById(`input-${task.day}`);
+                    geminiResult.style.display = 'none';
+
+                    geminiBtn.addEventListener('click', () => {
+                        const userText = userInput.value;
+                        if (!userText.trim()) {
+                            alert("Por favor, escreva algo na área de anotações primeiro.");
+                            return;
+                        }
+                        geminiResult.style.display = 'block';
+                        const prompt = `Baseado no seguinte problema de um usuário: "${userText}", sugira 3 a 5 passos de ação pequenos, práticos e imediatos que dependem exclusivamente da pessoa. Formate a resposta de forma clara e motivadora, usando negrito para os títulos das ações.`;
+                        callGeminiAPI(prompt, geminiBtn, geminiResult);
+                    });
+                }
+            });
+            
+            document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const card = e.target.closest('.task-card');
+                    card.classList.toggle('completed', e.target.checked);
+                    updateProgress();
+                });
+            });
+            
+            updateProgress();
+        });
+    </script>
+</body>
+</html>
